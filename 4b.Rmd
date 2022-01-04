@@ -1,0 +1,250 @@
+---
+title: "4b - Aniket Maheshwari"
+output: word_document
+---
+
+Setting up our environment and importing important libraries:
+
+```{r}
+### Clear the environment 
+rm(list = ls())
+
+
+### First we will set the directory of the R script 
+setwd("C:/Users/anike/Desktop/Sem 1/EAS 506 Statistical Data Mining/Homework/Homework 4")
+
+
+## Loading all the libraries 
+library(ISLR)
+library(corrplot)
+library(MASS)
+library(klaR)
+library(leaps)
+library(lattice)
+library(ggplot2)
+library(corrplot)
+library(car)
+library(caret)
+library(class)
+#install.packages("rpart")
+library(rpart)
+```
+
+
+Loading the dataset: 
+
+```{r}
+data("Boston")
+dim(Boston)
+str(Boston)
+data1 <- Boston
+summary(Boston)
+```
+
+So the dataset 'Boston' has 506 rows and 14 columns or features. All the features are numerical variables.
+
+Before starting EDA, first i’ll check whether the data has any missing values or not:
+
+```{r}
+NAmat = matrix(as.numeric(is.na(data1)) , ncol = 14)
+nonNAdx = which(rowSums(NAmat) == 0)
+length(nonNAdx)
+dim(data1)
+```
+
+so there are no missing value as length of nonNAdx is equal to number of rows in dataset Boston.
+
+Now i'll create my response variable 'crim' that will be a binary variable which contains 1 if the value is above than the median of crim variable and 0 if the value is below than the median of crim variable.
+
+```{r}
+median_crim <- median(Boston$crim)
+crim <- ifelse(Boston$crim > median_crim,1,0) 
+# If value is above median than value will be 1 or else it will be zero 
+Boston <- subset(Boston, select = c(2:14))
+Boston <- cbind(crim , Boston)
+head(Boston,2)
+
+```
+
+
+Now, the value of the different feature are in different size of scale. For example, crim is between 0.00632 - 88.97620 range whereas tax is in between 187-711 range. So i need to normalize this dataset so that all the features are in one scale before working on the dataset.
+
+Normalization: 
+
+```{r}
+normalize <- function(x) {
+  (x -min(x)) / (max(x) - min(x))
+  
+}
+
+Boston_Norm <- as.data.frame(lapply(Boston[2:14], normalize))
+Boston_Norm <- cbind(crim, Boston_Norm)
+head(Boston_Norm , 3)
+```
+
+
+Splitting the dataset into train and test dataset: 
+Now, I'll split the data into test and train dataset in 2:8 ratio. After the splitting, the train dataset will have 404 rows and 14 columns and test data set will have 102 rows and 14 columns.I'll use createDataPartition() method from caret package so that i have equal proportion of 0 and 1 in both train and test dataset.
+
+
+```{r}
+set.seed(1)
+sample_size <- floor(0.80 * nrow(Boston))
+set.seed(1)
+train_indexes <- sample(seq_len(nrow(Boston)), size = sample_size)
+training_data <- Boston[train_indexes ,]
+testing_data <- Boston[-train_indexes ,]
+dim(training_data)
+dim(testing_data)
+```
+
+
+Logistic Regression: 
+
+Logistic Regression uses linear regression with the addition of sigmoid function which helps in returning output in between 0-1 range. Here as i have two categorical features 0 and 1, if the logistic regression returns value lower than 0.5
+I’ll classify that as 0 and it returns value more than that then I’ll classify that as 1.
+
+```{r}
+logistic_reg_model <- glm(crim~.,data = training_data, family = binomial)
+logistic_reg_model_sum <- summary(logistic_reg_model)
+logistic_reg_model_sum
+```
+
+Here, 'dis' , 'rad' and 'nox' seems to be the most significant variables.
+
+Fitting the Logistic function to test dataset: 
+
+```{r}
+logistic_reg_pred_model = predict(logistic_reg_model, newdata = testing_data, type="response")
+pred_values = rep(0, length(testing_data$crim))
+pred_values[logistic_reg_pred_model > 0.5] = 1
+table(Predicted= pred_values , Survived = testing_data$crim)
+
+```
+
+
+Accuracy and Error: 
+
+```{r}
+data.frame(
+  Accuracy = (mean(testing_data$crim == pred_values)) * 100 , 
+  Error = (mean(testing_data$crim != pred_values)) * 100
+)
+```
+
+
+Logistic Regression gives accuracy of 87.25% and Error Rate of 12.74%.
+
+
+LDA:
+Linear Discriminant analysis is a true decision boundary discovery algorithm. It assumes that the class has common covariance and it’s decision boundary is linear separating the class.
+
+```{r}
+lda.model <- lda(crim~.,data = training_data)
+lda.model
+```
+
+Predicting LDA on test dataset: 
+
+```{r}
+pred.lda.model = predict(lda.model, newdata = testing_data)
+table(Predicted=pred.lda.model$class, Survived=testing_data$crim)
+test_pred_y <- pred.lda.model$class
+```
+
+Accuracy and Error: 
+
+```{r}
+data.frame(
+  Accuracy = (mean(testing_data$crim == test_pred_y)) * 100, 
+  Error =(mean(testing_data$crim != test_pred_y)) * 100
+)
+
+```
+
+
+LDA gives accuracy of 86.27% and Error rate of 13.72%.
+
+KNN: 
+
+K = 5: 
+
+```{r}
+x_train <- subset(training_data , select = -c(1))
+x_test <- subset(testing_data , select = -c(1))
+
+```
+
+```{r}
+set.seed(123)
+testing_knn <- knn(x_train , x_test , training_data$crim , k=5)
+confusion_matrix_knn <- table(testing_knn , testing_data$crim)
+confusion_matrix_knn1<- confusionMatrix(confusion_matrix_knn)
+confusion_matrix_knn1
+```
+
+Accuracy and Error rate: 
+
+```{r}
+data.frame(
+  Accuracy = (mean(testing_data$crim == testing_knn)) * 100,
+  Error = (mean(testing_data$crim != testing_knn)) * 100
+)
+```
+
+
+KNN gives accuracy of 89.2% and error rate of 10.7%.
+
+
+CART : Classification for decision Trees
+A decision tree is a flowchart-like structure in which each internal node represents a "test" on an attribute, each branch represents the outcome of the test, and each leaf node represents a class label. The paths from root to leaf represent classification rules.
+
+```{r}
+model.control <- rpart.control(minsplit = 10, xval = 10 , cp = 0)
+fit.training.data <- rpart(crim~. , data = training_data , method = "class" , control = model.control)
+fit.training.data
+
+```
+
+
+
+Plotting the Decision Tree: 
+```{r}
+x11()
+plot(fit.training.data, uniform = T , compress =  T)
+text(fit.training.data, cex = 0.5)
+
+```
+
+Predicting the test dataset: 
+```{r}
+predict_tree <- predict(fit.training.data, testing_data, type = "class")
+table(Predicted=predict_tree, Survived=testing_data$crim)
+```
+
+Accuracy and Error rate of decision Tree: 
+
+```{r}
+data.frame(
+  Accuracy = (mean(testing_data$crim == predict_tree)) * 100,
+  Error = (mean(testing_data$crim != predict_tree)) * 100
+)
+
+```
+
+
+Decision Tree gives accuracy of 97.05% and error rate of 2.94%.
+
+
+Comparing all models: 
+```{r}
+data.frame(
+  Logistic_Regression = (mean(testing_data$crim == pred_values)) * 100,
+  LDA_Accuracy = (mean(testing_data$crim == test_pred_y)) * 100,
+  KNN_Accuracy =  (mean(testing_data$crim == testing_knn)) * 100,
+  Decision_Tree_Accuracy = (mean(testing_data$crim == predict_tree)) * 100
+)
+
+```
+
+Out of all the models the decision tree gives the most accurate function for predicting whether crime rate is above or below the median.
